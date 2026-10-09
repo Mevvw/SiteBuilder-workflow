@@ -66,7 +66,7 @@ START → s1_style_framework → g1_style ─pass→ s2_animation → g2_animati
 
 ```
 01-style-and-scaffold.md   风格决策 + 框架方案
-scaffold/index.html        线框骨架页(演示文案+占位卡片,色板/字体/缓动生效)
+scaffold/index.html        线框骨架页(演示文案+占位卡片;s2 后注入入场/滚动/悬停动画)
 02-animation-spec.md       动画编排(入场/滚动/悬停 + 降级说明)
 03-perf-raw.json           perf_audit 五项检查原始输出
 03-perf-report.md          性能报告(LLM 解读)
@@ -76,7 +76,7 @@ run-report.json            汇总:门禁日志 / 回炉计数 / token 用量 / �
 
 ## 测试
 
-`python -m pytest -q` —— 53 项:
+`python -m pytest -q` —— 55 项:
 
 - T1/T2 门禁校验(色板 hex、缓动、模块、字体栈;属性白/黑名单、stagger/clip-reveal、降级说明)
 - T3 gate_3 责任路由(失败项多者优先,平局回 rework_counts 较小者)
@@ -88,6 +88,7 @@ run-report.json            汇总:门禁日志 / 回炉计数 / token 用量 / �
 - T9 mock 全链 happy path / T10 chaos 回炉自愈
 - T13 内容门禁:卡片数量上下限(3~6,可配置)与 span 层次字段
 - T14 provider 工厂:厂商预设(glm/kimi/qwen/openai)与自定义端点解析
+- T15 s2 动画注入:编排通过后骨架页携带真实动画(chaos 回炉后注入的是合规版)
 - T11/T12 cloud 集成(`RUN_CLOUD_TESTS=1` 启用,需 `.cloud-config.json`)
 
 ## 目录

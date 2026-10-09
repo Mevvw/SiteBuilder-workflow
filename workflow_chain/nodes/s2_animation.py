@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from workflow_chain.console import step_log
+from workflow_chain.nodes.s1_style_framework import _render_index_html
 from workflow_chain.state import AnimationSpec, WorkflowState
 from workflow_chain.tools import write_artifact
 
@@ -42,6 +43,68 @@ def _render_md(anim: AnimationSpec) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _anim_css(anim: AnimationSpec) -> str:
+    """从编排推导动画 CSS:时长取首条入场规则,stagger 步长取最小非零 delay。"""
+    entrance = anim.entrance[0] if anim.entrance else None
+    dur = max(80, min(2000, entrance.duration_ms if entrance else 600))
+    staggers = [r.delay_ms for r in anim.entrance if r.technique == "stagger" and r.delay_ms > 0]
+    step = min(staggers) if staggers else 120
+    clip = any(r.technique == "clip-reveal" for r in anim.scroll)
+    reveal_kf = "wf-clip-in" if clip else "wf-fade-up"
+    return (
+        "\n/* ===== s2 动画注入(源自 02-animation-spec 编排) ===== */\n"
+        "@keyframes wf-fade-up{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}\n"
+        "@keyframes wf-clip-in{from{clip-path:inset(0 0 100% 0);opacity:.5}to{clip-path:inset(0 0 0 0);opacity:1}}\n"
+        f"#hero .wrap>*{{opacity:0;animation:wf-fade-up {dur}ms var(--ease) forwards}}\n"
+        f"#hero .wrap>*:nth-child(2){{animation-delay:{step}ms}}\n"
+        f"#hero .wrap>*:nth-child(3){{animation-delay:{step * 2}ms}}\n"
+        f"#hero .wrap>*:nth-child(4){{animation-delay:{step * 3}ms}}\n"
+        f"#hero .wrap>*:nth-child(5){{animation-delay:{step * 4}ms}}\n"
+        f"#hero .wrap>*:nth-child(6){{animation-delay:{step * 5}ms}}\n"
+        "[data-reveal]{opacity:0}\n"
+        f"[data-reveal].is-in{{animation:{reveal_kf} {dur}ms var(--ease) forwards}}\n"
+        ".card{transition:transform .3s var(--ease)}\n"
+        ".card:hover{transform:translateY(-3px)}\n"
+        "@media (prefers-reduced-motion: reduce){\n"
+        "  #hero .wrap>*,[data-reveal]{opacity:1!important;animation:none!important}\n"
+        "  .card:hover{transform:none}\n"
+        "}\n"
+    )
+
+
+def _anim_js(anim: AnimationSpec) -> str:
+    """滚动揭示脚本:IntersectionObserver 一次性触发,节奏取编排 stagger 步长。"""
+    staggers = [r.delay_ms for r in anim.entrance if r.technique == "stagger" and r.delay_ms > 0]
+    step = min(staggers) if staggers else 120
+    return (
+        "<script>\n"
+        "(function(){\n"
+        "  var els=[].slice.call(document.querySelectorAll('[data-reveal]'));\n"
+        "  var reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;\n"
+        "  if(reduce||!('IntersectionObserver' in window)){els.forEach(function(e){e.classList.add('is-in')});return}\n"
+        "  var io=new IntersectionObserver(function(es){es.forEach(function(en){"
+        "if(en.isIntersecting){en.target.classList.add('is-in');io.unobserve(en.target)}})},{threshold:.15});\n"
+        f"  els.forEach(function(e,i){{e.style.animationDelay=(i%3)*{step}+'ms';io.observe(e)}});\n"
+        "})();\n"
+        "</script>"
+    )
+
+
+def _inject_animations(style, anim: AnimationSpec) -> str:
+    """在 s1 骨架之上注入动画(DESIGN 第二步:骨架之上统一编排)。
+
+    对占位卡/指标块/信息行打 data-reveal 标记,滚动进入视口时揭示;
+    入场序列作用于 Hero 直接子元素;reduced-motion 全量降级。
+    """
+    base = _render_index_html(style)
+    base = base.replace('<div class="card">', '<div class="card" data-reveal>')
+    base = base.replace('<div class="stat">', '<div class="stat" data-reveal>')
+    base = base.replace('<div class="row">', '<div class="row" data-reveal>')
+    base = base.replace("</style>", _anim_css(anim) + "</style>")
+    base = base.replace("</body>", _anim_js(anim) + "\n</body>")
+    return base
+
+
 def make_s2(runner, config=None):
     def s2_animation(state: WorkflowState) -> dict:
         style, scaffold = state.get("style"), state.get("scaffold")
@@ -56,7 +119,9 @@ def make_s2(runner, config=None):
             user += f"\n\n【上次回炉反馈(必须逐条修复,严禁重犯)】\n{fb}"
         anim = runner.structured(AnimationSpec, SYSTEM, user)
         write_artifact(state["artifacts_dir"], "02-animation-spec.md", _render_md(anim))
-        step_log("s2", f"动画编排就绪(入场 {len(anim.entrance)} / 滚动 {len(anim.scroll)} / 悬停 {len(anim.hover)})")
+        # 编排通过解析后,把动画真正注入骨架页(门禁若打回,回炉重跑会再次覆盖)
+        write_artifact(state["artifacts_dir"], "scaffold/index.html", _inject_animations(style, anim))
+        step_log("s2", f"动画编排就绪并已注入骨架页(入场 {len(anim.entrance)} / 滚动 {len(anim.scroll)} / 悬停 {len(anim.hover)})")
         return {"animation": anim, "feedback": {"s2": None}}
 
     return s2_animation

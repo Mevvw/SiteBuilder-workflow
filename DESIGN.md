@@ -56,7 +56,7 @@ START
 | 节点 | 读取(state) | 写入(state) | 落盘产物 | LLM 调用形态 |
 |------|--------------|--------------|----------|--------------|
 | `s1_style_framework` | `brief`、`feedback["s1"]`(可空) | `style: StyleDecision`、`scaffold: ScaffoldPlan`、`feedback.pop("s1")` | `01-style-and-scaffold.md` + `scaffold/index.html`(线框骨架:演示文案+占位卡片,确定性渲染) | system=资深建站架构师规则;user=brief+反馈;`with_structured_output(StyleScaffoldOut)` |
-| `s2_animation` | `style`、`scaffold`、`feedback["s2"]`(可空) | `animation: AnimationSpec`、`feedback.pop("s2")` | `02-animation-spec.md` | system=动效编排师规则(三手法白名单);user=style/scaffold 摘要+反馈;结构化输出 |
+| `s2_animation` | `style`、`scaffold`、`feedback["s2"]`(可空) | `animation: AnimationSpec`、`feedback.pop("s2")` | `02-animation-spec.md` + **重写 `scaffold/index.html`(把编排注入骨架页:入场 stagger/滚动揭示/悬停/reduced-motion 降级)** | system=动效编排师规则(三手法白名单);user=style/scaffold 摘要+反馈;结构化输出 |
 | `s3_performance` | `style`、`scaffold`、`animation` | `perf: PerfReport` | `03-perf-report.md`、`03-perf-raw.json`(工具原始输出) | 先 `perf_audit(animation, scaffold)` 得 JSON → LLM 仅做解读与修复建议(文本输出) |
 | `s4_content` | `brief`、`style`、`scaffold`、`animation`、`perf` | `content: ContentPlan` | `04-content-plan.md` | system=内容策划规则(禁虚构);user=全部上游摘要;结构化输出 |
 | `finalize` | 全部产物字段、`gate_logs`、`usage` | `status="done"` | `run-report.json` | ❌ |
@@ -252,7 +252,7 @@ langchain-workflow/
 | + | 自查:LangGraph 条件边只读不能写状态,原设计"条件边做校验并写反馈"不可行 | 架构修正:「门禁节点(写状态)+ 路由条件边(纯路由)」两件套 | §0/§1 |
 
 **实现落位(与 §8 目录对应)**:`state.py`(模型+reducer)/ `tools.py`(perf_audit、write_artifact、redact_secrets)/ `gates.py`(门禁节点+路由)/ `llm.py`(Budget、自修复、Mock/OpenAI 兼容 Runner)/ `nodes/`(六节点)/ `graph.py`(组装+run_chain)/ `__main__.py`(CLI:run / models 子命令)。
-测试:53 项全绿(T1~T10、T13、T14 离线;T11/T12 cloud 集成默认跳过,RUN_CLOUD_TESTS=1 启用)。
+测试:55 项全绿(T1~T10、T13~T15 离线;T11/T12 cloud 集成默认跳过,RUN_CLOUD_TESTS=1 启用)。
 
 ---
 
