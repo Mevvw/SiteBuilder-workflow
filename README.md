@@ -6,6 +6,8 @@
 - 门禁规则全部来自真实前端项目实战验证过的规则(禁 blur/弹跳、只动 transform/opacity/clip-path、性能五项清单等)
 - 设计文档:[DESIGN.md](DESIGN.md)(拓扑 / 节点 IO / 状态字段 / 门禁循环终止 / 工具 / 容错 / 测试用例 / 评审修订记录)
 
+![架构总览](docs/architecture.svg)
+
 ## 快速开始
 
 ```bash
