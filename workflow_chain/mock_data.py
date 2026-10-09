@@ -69,20 +69,29 @@ def good_content() -> ContentPlan:
     return ContentPlan(
         cards=[
             ContentCard(
-                id="m01",
-                tag="MENU",
-                title="当季菜单",
+                id="w01",
+                tag="SIGNATURE",
+                title="当季招牌",
                 desc="手冲单品与季节特调的完整清单:豆种产地、风味描述与价格一目了然。",
                 status="LIVE",
+                span="wide",
                 link=LinkSpec(label="查看", href="https://example.com/menu"),
             ),
             ContentCard(
-                id="s01",
+                id="w02",
                 tag="STORE",
                 title="门店信息",
                 desc="各门店地址、营业时间与预约方式,另含手冲体验课的报名入口。",
                 status="LIVE",
                 link=LinkSpec(label="前往", href="https://example.com/store"),
+            ),
+            ContentCard(
+                id="w03",
+                tag="GUIDE",
+                title="手冲指南",
+                desc="从研磨度到水温的入门教程:三段式注水手法与常见风味误区解析。",
+                status="LIVE",
+                link=LinkSpec(label="阅读", href="https://example.com/guide"),
             ),
         ],
         placeholders_removed=True,

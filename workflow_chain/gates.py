@@ -175,10 +175,15 @@ def route_g3(state: WorkflowState, max_reworks: int = 2) -> str:
 
 
 # ---------------- gate_4:内容 ----------------
-def check_content(content) -> list[str]:
+def check_content(content, min_cards: int = 3, max_cards: int = 6) -> list[str]:
     if content is None:
         return ["缺少 content(内容方案)"]
     v: list[str] = []
+    n = len(content.cards)
+    if n < min_cards:
+        v.append(f"卡片数量 {n} 张少于下限 {min_cards} 张(展示层次不足)")
+    elif n > max_cards:
+        v.append(f"卡片数量 {n} 张超过上限 {max_cards} 张")
     if not content.placeholders_removed:
         v.append("placeholders_removed=False(占位未清零)")
     for c in content.cards:
@@ -195,7 +200,13 @@ def check_content(content) -> list[str]:
 
 
 def g4_content(state: WorkflowState) -> dict:
-    v = check_content(state.get("content"))
+    # 数量上下限从 state.config 读取(CLI --min-cards/--max-cards 写入),缺省 3~6
+    cfg = state.get("config") or {}
+    v = check_content(
+        state.get("content"),
+        int(cfg.get("min_cards", 3)),
+        int(cfg.get("max_cards", 6)),
+    )
     return _finish_gate(state, "g4_content", "s4", v)
 
 

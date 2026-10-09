@@ -19,6 +19,8 @@ class RunConfig:
     model: str = ""
     structured_output_mode: str = "mock"  # mock | json_mode | function_calling
     max_reworks: int = 2
+    min_cards: int = 3  # 内容卡数量门禁下限(种子提示词规则:作品卡 3~6 张)
+    max_cards: int = 6  # 内容卡数量门禁上限
     max_total_tokens: int = 200_000  # 预算硬上限
     max_llm_calls: int = 50
     temperature: float = 0.3
@@ -51,13 +53,19 @@ def make_config(
     max_reworks: int = 2,
     structured_output_mode: str | None = None,
     artifacts_dir: str | None = None,
+    min_cards: int = 3,
+    max_cards: int = 6,
 ) -> RunConfig:
     """provider 工厂:mock 零依赖;cloud 读 .cloud-config.json;deepseek 读 DEEPSEEK_API_KEY。
 
     任何配置错误在此抛 ConfigError —— 启动前校验,不进图(DESIGN.md §6 L3)。
     """
     provider = (provider or "mock").lower()
-    common = dict(max_reworks=max_reworks)
+    if min_cards < 1 or max_cards < min_cards:
+        raise ConfigError(
+            f"内容卡数量门禁非法:min_cards={min_cards}, max_cards={max_cards}(需 1 ≤ min ≤ max)"
+        )
+    common = dict(max_reworks=max_reworks, min_cards=min_cards, max_cards=max_cards)
 
     if provider == "mock":
         return RunConfig(

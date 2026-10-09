@@ -47,7 +47,7 @@ START
 | `g1_style` | `style` + `scaffold` | 色板 4 值均为合法 hex;`easing` 为 cubic-bezier;`modules` ⊇ {Hero, Works, Contact};`font_stack` 不含 http/外链字体;`files` ≥ 3 且路径无 `..` | 回 `s1`(计数+1,反馈=违规列表);超限 → `abort` |
 | `g2_animation` | `animation` | 所有 `properties` ⊆ {transform, opacity, clip-path};**黑名单只扫描 properties 字符串**(如 `blur(`、`bounce`、`elastic`、`spring(`、`shake`),`technique` 已由 Literal 枚举在类型层封死,**自然语言字段(reduced_motion_fallback 等)一律不扫**,防误杀;`reduced_motion_fallback` 非空;入场含 stagger、滚动含 clip-reveal | 回 `s2`;超限 → `abort` |
 | `g3_performance` | `perf`(即 s3 里 `perf_audit` 的 AuditRaw) | `all_pass=True`。**gate_3 自身零规则**(规则全部活在 perf_audit 里,避免两处维护):只读 `all_pass` 与失败项 owner。**责任路由:失败项数量多者优先(owner 计数);平局回 rework_counts 较小者** —— 兼顾责任归属与公平性,防止某步被反复回炉而另一步从未触发 | 失败项 owner=animation → 回 `s2`;owner=scaffold → 回 `s1`;超限 → `abort` |
-| `g4_content` | `content` | `placeholders_removed=True`;每张卡 `desc` 非空且 ≥ 8 字;`link.href` 仅允许 `https?://` 或不含 `..` 的相对路径;`status` ∈ {LIVE, PLANNED, RESERVED} 且 LIVE 卡有 link | 回 `s4`;超限 → `abort` |
+| `g4_content` | `content` | `placeholders_removed=True`;每张卡 `desc` 非空且 ≥ 8 字;**卡片数量 ∈ [min_cards, max_cards]**(默认 3~6,CLI `--min-cards/--max-cards` 可调,从 state.config 读取);`link.href` 仅允许 `https?://` 或不含 `..` 的相对路径;`status` ∈ {LIVE, PLANNED, RESERVED} 且 LIVE 卡有 link | 回 `s4`;超限 → `abort` |
 
 ---
 
@@ -109,7 +109,7 @@ class ContentPlan(BaseModel):
 |------|------|--------|---------|------|
 | `brief` | `str` | CLI | 覆盖 | 用户需求简述 |
 | `run_id` / `artifacts_dir` | `str` | CLI | 覆盖 | 本次运行标识与产物目录 |
-| `provider` / `model` / `max_reworks` | `RunConfig` | CLI | 覆盖 | 运行配置(不可变);另含 `structured_output_mode`(function_calling / json_mode / prompt_only,按 provider 显式配置默认值)、`max_total_tokens=200_000`、`max_llm_calls=50` 预算硬上限 |
+| `provider` / `model` / `max_reworks` | `RunConfig` | CLI | 覆盖 | 运行配置(不可变);另含 `structured_output_mode`(function_calling / json_mode / prompt_only,按 provider 显式配置默认值)、`max_total_tokens=200_000`、`max_llm_calls=50` 预算硬上限、`min_cards=3` / `max_cards=6`(内容卡数量门禁,gate_4 从 state.config 读取) |
 | `style` | `StyleDecision \| None` | s1 | 覆盖 | ① 风格决策 |
 | `scaffold` | `ScaffoldPlan \| None` | s1 | 覆盖 | ① 框架方案 |
 | `animation` | `AnimationSpec \| None` | s2 | 覆盖 | ② 动画编排 |
@@ -252,4 +252,20 @@ langchain-workflow/
 | + | 自查:LangGraph 条件边只读不能写状态,原设计"条件边做校验并写反馈"不可行 | 架构修正:「门禁节点(写状态)+ 路由条件边(纯路由)」两件套 | §0/§1 |
 
 **实现落位(与 §8 目录对应)**:`state.py`(模型+reducer)/ `tools.py`(perf_audit、write_artifact、redact_secrets)/ `gates.py`(门禁节点+路由)/ `llm.py`(Budget、自修复、Mock/OpenAI 兼容 Runner)/ `nodes/`(六节点)/ `graph.py`(组装+run_chain)/ `__main__.py`(CLI:run / models 子命令)。
-测试:41 项全绿(T1~T10 离线;T11/T12 cloud 集成默认跳过,RUN_CLOUD_TESTS=1 启用)。
+测试:46 项全绿(T1~T10、T13 离线;T11/T12 cloud 集成默认跳过,RUN_CLOUD_TESTS=1 启用)。
+
+---
+
+## 10. 增补记录(v1.1 → v1.2,2026-10-09)
+
+主人提供 2026-10-03 种子提示词,按「只提取通用网站设计规则」口径落位 5 条(2 条纯文案并入节点 SYSTEM,3 条为代码/门禁):
+
+| # | 种子规则 | 落点 |
+|---|---------|------|
+| 1 | 风格偏好(高级简洁现代/克制科技感)+ 三禁忌(不过度赛博朋克/不做SaaS官网感/不做传统作品集模板感)+ 克制视觉手法(细网格/微光晕/噪点/细线条) | s1 SYSTEM「风格取向」段 |
+| 2 | 作品卡数量 3~6 张 | RunConfig.min_cards/max_cards(默认 3/6,CLI `--min-cards/--max-cards`,make_config 启动前校验);gate_4 从 state.config 读取校验;T13 |
+| 3 | 展示层次感、不要普通图片网格 | ContentCard.span ∈ {"", wide, full}(wide=跨2列,full=横贯全宽);s4 SYSTEM 规则 2;04-content-plan.md 展示跨度 |
+| 4 | 联系模块隐私红线(只留姓名+联系方式,禁照片/年龄/所在地/工作年限) | s4 SYSTEM 规则 6 |
+| 5 | 桌面端优先、兼顾移动端 | s1 SYSTEM「风格取向」段 |
+
+另并入 s2 SYSTEM(纯文案偏好,不做门禁):首屏 delay 参考序列(50/120/280/460/580ms 递进,主视觉压轴)、悬停全站同幅同曲线。

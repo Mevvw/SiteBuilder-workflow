@@ -98,6 +98,8 @@ def main(argv=None) -> int:
     run_p.add_argument("--max-reworks", type=int, default=2, help="每步回炉上限(默认 2)")
     run_p.add_argument("--chaos", default="", help="注入毒样本,如 s2:1(第 1 次调用)或 s2:0(每次)")
     run_p.add_argument("--out", default="output", help="产物根目录(默认 ./output)")
+    run_p.add_argument("--min-cards", type=int, default=3, help="内容卡数量下限(默认 3)")
+    run_p.add_argument("--max-cards", type=int, default=6, help="内容卡数量上限(默认 6)")
 
     models_p = sub.add_parser("models", help="列出云端可用模型(cloud 档)")
     models_p.add_argument("--config", default=CLOUD_CONFIG_FILE)
@@ -110,7 +112,8 @@ def main(argv=None) -> int:
     try:
         chaos = _parse_chaos(getattr(args, "chaos", ""))
         config = make_config(args.provider, model=args.model,
-                             max_reworks=args.max_reworks)
+                             max_reworks=args.max_reworks,
+                             min_cards=args.min_cards, max_cards=args.max_cards)
     except (ConfigError, ValueError) as e:
         console.print(f"[red]配置错误:[/red]{e}")
         return 2

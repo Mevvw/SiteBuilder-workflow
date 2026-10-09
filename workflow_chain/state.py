@@ -124,6 +124,7 @@ class ContentCard(BaseModel):
     title: str
     desc: str
     status: Literal["LIVE", "PLANNED", "RESERVED"]
+    span: Literal["", "wide", "full"] = ""  # 版面跨度:wide=跨2列 full=横贯全宽,空=普通卡(层次感用)
     link: Optional[LinkSpec] = None
 
 

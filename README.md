@@ -54,6 +54,7 @@ START → s1_style_framework → g1_style ─pass→ s2_animation → g2_animati
 
 - **门禁 = 门禁节点 + 路由条件边**两件套(LangGraph 条件边只读,只有节点能写状态)
 - 每步回炉上限 `--max-reworks`(默认 2),超限走 abort;反馈写入 `state.feedback`,重跑注入 prompt,成功后显式清除
+- 内容门禁:作品卡数量默认 3~6(`--min-cards/--max-cards` 可调);`span` 字段标注层次跨度(wide=跨2列 / full=横贯全宽);联系模块遵守隐私红线(只保留姓名+联系方式,禁照片/年龄/所在地/工作年限)
 - 预算硬上限:`max_total_tokens=200_000` / `max_llm_calls=50`,触顶 abort(报告标注 budget_exceeded)
 - 所有报告落盘前过 `redact_secrets()` 脱敏
 
@@ -73,7 +74,7 @@ run-report.json            汇总:门禁日志 / 回炉计数 / token 用量 / �
 
 ## 测试
 
-`python -m pytest -q` —— 41 项:
+`python -m pytest -q` —— 46 项:
 
 - T1/T2 门禁校验(色板 hex、缓动、模块、字体栈;属性白/黑名单、stagger/clip-reveal、降级说明)
 - T3 gate_3 责任路由(失败项多者优先,平局回 rework_counts 较小者)
@@ -83,6 +84,7 @@ run-report.json            汇总:门禁日志 / 回炉计数 / token 用量 / �
 - T7 mock provider + chaos 语义
 - T8 结构化输出自修复(坏 JSON → 修复 → 成功;重试耗尽 → FatalLLMError)
 - T9 mock 全链 happy path / T10 chaos 回炉自愈
+- T13 内容门禁:卡片数量上下限(3~6,可配置)与 span 层次字段
 - T11/T12 cloud 集成(`RUN_CLOUD_TESTS=1` 启用,需 `.cloud-config.json`)
 
 ## 目录
