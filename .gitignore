@@ -1,0 +1,17 @@
+# ===== 凭证与本地配置(严禁入库)=====
+# WorkBuddy 云服务激活产物:endpoint + publishableKey 组合即可调用该应用的云端 LLM
+.cloud-config.json
+# DeepSeek 等私有 Key
+.env
+
+# ===== 运行产物 =====
+output/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ===== 编辑器/系统 =====
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

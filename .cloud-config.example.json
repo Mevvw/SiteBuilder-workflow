@@ -1,0 +1,8 @@
+{
+  "applicationId": "wbapp_xxxxxxxxxxxxxxxxxx",
+  "publicConfig": {
+    "resourceId": "wbcs_xxxxxxxxxxxxxxxxxx",
+    "endpoint": "https://your-app-name.app.workbuddy.host",
+    "publishableKey": "wbpk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  }
+}
