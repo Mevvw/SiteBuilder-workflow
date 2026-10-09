@@ -93,7 +93,8 @@ def main(argv=None) -> int:
 
     run_p = sub.add_parser("run", help="跑一次全链")
     run_p.add_argument("brief", help="需求简述")
-    run_p.add_argument("--provider", default="mock", choices=["mock", "cloud", "deepseek"])
+    run_p.add_argument("--provider", default="mock",
+                       help="mock / cloud / deepseek / glm / kimi / qwen / openai / 自定义名(需 LLM_BASE_URL+LLM_API_KEY)")
     run_p.add_argument("--model", default="", help="模型名(cloud 档必填,可用 models 子命令查询)")
     run_p.add_argument("--max-reworks", type=int, default=2, help="每步回炉上限(默认 2)")
     run_p.add_argument("--chaos", default="", help="注入毒样本,如 s2:1(第 1 次调用)或 s2:0(每次)")

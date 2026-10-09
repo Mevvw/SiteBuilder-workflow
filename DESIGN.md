@@ -6,7 +6,7 @@
 > (禁 blur/弹跳、只动 transform/opacity/clip-path、性能五项清单等)。
 
 - 技术栈:Python 3.11+ / LangGraph(骨架)+ LangChain(组件,`langchain-openai` 兼容端点)+ Pydantic v2 + rich(CLI)
-- 模型接入:工厂三档可切 `mock` / `cloud`(WorkBuddy 云端免密钥 LLM,OpenAI 兼容 SSE)/ `deepseek`(用户自己的 Key)
+- 模型接入:`mock` / `cloud`(WorkBuddy 云端免密钥 LLM,OpenAI 兼容 SSE)/ OpenAI 兼容族(`deepseek`、`glm`、`kimi`、`qwen`、`openai` 预设 + `LLM_BASE_URL` 自定义端点,用户自己的 Key)
 - 交付形态:CLI(`python -m workflow_chain run "<需求简述>"`),产物落盘 `output/<run_id>/`
 
 ---
@@ -160,7 +160,7 @@ CLI 退出码:`0=done`,`1=aborted`,`2=fatal error`。
 |------|------|------|------|
 | `perf_audit` | `(animation: AnimationSpec, scaffold: ScaffoldPlan) -> AuditRaw` | **确定性 Python**,**规则唯一事实来源** | 五项检查(通用前端性能清单):① 动画属性白名单/黑名单扫描(owner=animation)② WebGL/重特效项必须有视口暂停说明(owner=animation)③ 滚动/指针监听须含 rAF 节流说明、禁止布局抖动属性(owner=animation)④ 依赖体积预算:`deps` 含 three/gsap 等重依赖时须有分包/懒加载说明(owner=scaffold)⑤ `reduced_motion_fallback` 覆盖(owner=animation)。每项产出 `{check, passed, owner, detail}`。**gate_3 只消费其结果(all_pass + owner),自身零规则**;T4 单测直接测 perf_audit 的规则,gate 层单测只测路由 |
 | `write_artifact` | `(artifacts_dir, filename, content) -> {path, bytes}` | 确定性 | **路径穿越防护**:resolve 后必须仍在 artifacts_dir 内,否则拒绝;utf-8 落盘 |
-| 结构化输出 | `runner.structured(...)` | LangChain 能力 | **按 provider 显式配置 `structured_output_mode`**:cloud → `json_mode`(端点文档明确支持 response_format),deepseek → `function_calling`,mock → 直接返回对象。解析失败自修复重试时,**修复 prompt 只附解析错误 + 原输出前 2000 字符**,不整段塞回,防上下文爆炸 |
+| 结构化输出 | `runner.structured(...)` | LangChain 能力 | **按 provider 显式配置 `structured_output_mode`**:cloud → `json_mode`(端点文档明确支持 response_format),OpenAI 兼容档(deepseek/glm/kimi/qwen/openai/自定义)→ `function_calling`,mock → 直接返回对象。解析失败自修复重试时,**修复 prompt 只附解析错误 + 原输出前 2000 字符**,不整段塞回,防上下文爆炸 |
 
 > 演示版刻意保持工具面窄(IO 只进不出、审计不联网),把复杂度留给"链 + 门禁 + 回炉"本身;
 > 后续可平滑挂文件系统/网页抓取工具。
@@ -181,7 +181,7 @@ CLI 退出码:`0=done`,`1=aborted`,`2=fatal error`。
 ### L3 图执行层
 - `graph.invoke()` 外层 try/except:未预期异常写 `abort-report.json`。
 - **脱敏**:报告落盘前必须过 `redact_secrets()` —— 对 `sk-…`、`Bearer …`、`api_key=…`、`api_key: …` 等模式打码,防止 traceback 里的 Key 随开源报告泄露。
-- 配置错误(provider 名非法、deepseek 档缺 Key、cloud 档缺 .cloud-config.json)**启动前**校验,不进图。
+- 配置错误(provider 名非法、OpenAI 兼容档缺 Key、cloud 档缺 .cloud-config.json)**启动前**校验,不进图。
 - LLM 中断/流截断:保留已生成文本摘要进报告,标记 `interrupted`。
 
 ---
@@ -252,7 +252,7 @@ langchain-workflow/
 | + | 自查:LangGraph 条件边只读不能写状态,原设计"条件边做校验并写反馈"不可行 | 架构修正:「门禁节点(写状态)+ 路由条件边(纯路由)」两件套 | §0/§1 |
 
 **实现落位(与 §8 目录对应)**:`state.py`(模型+reducer)/ `tools.py`(perf_audit、write_artifact、redact_secrets)/ `gates.py`(门禁节点+路由)/ `llm.py`(Budget、自修复、Mock/OpenAI 兼容 Runner)/ `nodes/`(六节点)/ `graph.py`(组装+run_chain)/ `__main__.py`(CLI:run / models 子命令)。
-测试:46 项全绿(T1~T10、T13 离线;T11/T12 cloud 集成默认跳过,RUN_CLOUD_TESTS=1 启用)。
+测试:53 项全绿(T1~T10、T13、T14 离线;T11/T12 cloud 集成默认跳过,RUN_CLOUD_TESTS=1 启用)。
 
 ---
 

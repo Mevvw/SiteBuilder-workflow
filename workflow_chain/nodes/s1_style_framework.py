@@ -14,7 +14,7 @@ SYSTEM = """你是资深建站架构师。根据需求简述(与回炉反馈)产
 5. scaffold.files 至少 3 项,路径为相对路径且不含 ..;
 6. deps 只列真实需要的;若含 three/gsap 等重依赖,必须在 bundle_note 写明分包或懒加载策略。
 
-风格取向(除非需求简述明确要求其他方向,默认遵守):高级、简洁、现代,克制的科技感/未来感,留白充分、层次分明;视觉手法优先细网格、微弱光晕、噪点、细线条等轻量元素,避免大色块堆砌;三条禁忌 —— 不过度赛博朋克、不做普通 SaaS 官网感、不做传统设计师作品集模板感;桌面端优先设计,同时兼顾移动端(模块结构与文案在窄屏下不塌陷)。
+风格取向(除非需求简述明确要求其他方向,默认遵守):高级、简洁、现代,克制的科技感/未来感,留白充分、层次分明;视觉手法优先细网格、微弱光晕、噪点、细线条等轻量元素,避免大色块堆砌;三条禁忌 —— 不过度赛博朋克、不做普通 SaaS 官网感、不做传统设计师作品集模板感;桌面端优先设计,同时兼顾移动端(模块结构与文案在窄屏下不塌陷)。注意:tone 字段只写 12 字以内的风格关键词(如「温暖纸质感 · 手作编辑排版」),严禁把上述取向说明复述进 tone。
 
 若存在【上次回炉反馈】,必须逐条修复,严禁重犯。"""
 
@@ -55,13 +55,18 @@ def _render_index_html(style) -> str:
 
     p = style.palette
     site = esc(style.site_type)
-    tone = esc(style.tone)
     mods = [str(m) for m in style.modules]
 
     css = (
         f":root{{--bg:{p.bg};--acc:{p.acc};--accent2:{p.accent2};--txt:{p.txt};--ease:{style.easing}}}\n"
         "*{box-sizing:border-box}\n"
-        f"body{{margin:0;background:var(--bg);color:var(--txt);font-family:{style.font_stack};line-height:1.65}}\n"
+        f"body{{margin:0;background-color:var(--bg);color:var(--txt);font-family:{style.font_stack};line-height:1.65;"
+        "background-image:"
+        "radial-gradient(ellipse 62% 46% at 10% -6%,color-mix(in srgb,var(--acc) 10%,transparent),transparent 72%),"
+        "radial-gradient(ellipse 56% 42% at 90% -2%,color-mix(in srgb,var(--accent2) 8%,transparent),transparent 72%),"
+        "linear-gradient(color-mix(in srgb,var(--txt) 5%,transparent) 1px,transparent 1px),"
+        "linear-gradient(90deg,color-mix(in srgb,var(--txt) 5%,transparent) 1px,transparent 1px);"
+        "background-size:auto,auto,44px 44px,44px 44px;background-attachment:fixed}\n"
         "a{color:inherit;text-decoration:none}\n"
         ".wrap{max-width:1060px;margin:0 auto;padding:0 28px}\n"
         "nav{position:sticky;top:0;z-index:9;backdrop-filter:blur(10px);border-bottom:1px solid rgba(128,128,128,.18)}\n"
@@ -113,9 +118,9 @@ def _render_index_html(style) -> str:
     hero = (
         f'<header id="hero"><div class="wrap">\n'
         f'<span class="eyebrow">{site} · 线框骨架</span>\n'
-        f"<h1>{tone}</h1>\n"
-        f'<p class="lede">本页由 site-workflow-chain 自动生成:色板、字体栈与缓动曲线已实际注入,'
-        f'所有文案与卡片均为占位演示 —— 第四步「内容替换」会用真实内容填充。</p>\n'
+        f"<h1>XX 公司</h1>\n"
+        f'<p class="lede">「XX 公司」为临时演示文字,将被真实名称替换;本页由 site-workflow-chain 自动生成,'
+        f'色板、字体栈与缓动曲线已实际注入 —— 第四步「内容替换」会用真实内容填充。</p>\n'
         f'<a class="btn btn--solid" href="#works">浏览内容</a>'
         f'<a class="btn btn--ghost" href="#contact">联系我们</a>\n'
         f'<div class="ph hero-visual">首屏视觉区占位(大图 / 光柱 / 插画位)</div>\n'
@@ -173,7 +178,7 @@ def _render_index_html(style) -> str:
         )
 
     nav = (
-        f'<nav><div class="wrap"><span class="brand">{site}</span>'
+        f'<nav><div class="wrap"><span class="brand">XX 公司</span>'
         f'<div class="links">' + "".join(f'<a href="#{esc(m.lower())}">{esc(m)}</a>' for m in mods) + "</div></div></nav>"
     )
 
@@ -191,7 +196,7 @@ def _render_index_html(style) -> str:
         else:
             parts.append(generic_sec(m))
     parts.append(
-        f'<footer><div class="wrap"><span>© {site}</span>'
+        f'<footer><div class="wrap"><span>© XX 公司</span>'
         f"<span>线框骨架 · 由 site-workflow-chain 生成</span></div></footer>"
     )
 

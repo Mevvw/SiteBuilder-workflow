@@ -8,6 +8,19 @@ from pathlib import Path
 
 CLOUD_CONFIG_FILE = ".cloud-config.json"
 
+# OpenAI 兼容厂商预设:别名 → (base_url, .env 中的 Key 名, 默认模型)。
+# 这些厂商都暴露 OpenAI 兼容的 chat/completions 端点,共用 OpenAICompatRunner。
+OPENAI_COMPAT_PRESETS: dict[str, tuple[str, str, str]] = {
+    "deepseek": ("https://api.deepseek.com/v1", "DEEPSEEK_API_KEY", "deepseek-chat"),
+    "glm": ("https://open.bigmodel.cn/api/paas/v4", "ZHIPU_API_KEY", ""),
+    "zhipu": ("https://open.bigmodel.cn/api/paas/v4", "ZHIPU_API_KEY", ""),
+    "kimi": ("https://api.moonshot.cn/v1", "MOONSHOT_API_KEY", ""),
+    "moonshot": ("https://api.moonshot.cn/v1", "MOONSHOT_API_KEY", ""),
+    "qwen": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "DASHSCOPE_API_KEY", ""),
+    "dashscope": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "DASHSCOPE_API_KEY", ""),
+    "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY", ""),
+}
+
 
 class ConfigError(RuntimeError):
     """配置错误:进图前短路,不消耗任何 token。"""
@@ -55,10 +68,12 @@ def make_config(
     artifacts_dir: str | None = None,
     min_cards: int = 3,
     max_cards: int = 6,
+    _env: dict[str, str] | None = None,
 ) -> RunConfig:
-    """provider 工厂:mock 零依赖;cloud 读 .cloud-config.json;deepseek 读 DEEPSEEK_API_KEY。
+    """provider 工厂:mock 零依赖;cloud 读 .cloud-config.json;OpenAI 兼容预设/自定义端点读 .env。
 
     任何配置错误在此抛 ConfigError —— 启动前校验,不进图(DESIGN.md §6 L3)。
+    _env 仅供测试注入,默认从 .env + 环境变量合并读取(环境变量优先)。
     """
     provider = (provider or "mock").lower()
     if min_cards < 1 or max_cards < min_cards:
@@ -72,17 +87,41 @@ def make_config(
             provider="mock", model="mock-1", structured_output_mode="mock", **common
         )
 
-    if provider == "deepseek":
-        env = {**_read_dotenv(), **{k: v for k, v in os.environ.items() if k == "DEEPSEEK_API_KEY" and v}}
-        key = env.get("DEEPSEEK_API_KEY", "")
+    env = dict(_env) if _env is not None else {
+        **_read_dotenv(),
+        **{k: v for k, v in os.environ.items() if v},
+    }
+
+    if provider in OPENAI_COMPAT_PRESETS:
+        base_url, env_key, default_model = OPENAI_COMPAT_PRESETS[provider]
+        key = env.get(env_key) or env.get("LLM_API_KEY", "")
         if not key:
-            raise ConfigError("deepseek 档需要 DEEPSEEK_API_KEY(写入 .env 或环境变量,.env.example 有示例)")
+            raise ConfigError(
+                f"{provider} 档需要 {env_key}(或通用 LLM_API_KEY),写入 .env 或环境变量,.env.example 有示例"
+            )
+        use_model = model or env.get("WORKFLOW_MODEL", "") or default_model
+        if not use_model:
+            raise ConfigError(f"{provider} 档需要 --model 指定模型名(如 glm-5.3 / moonshot-v1-8k)")
         return RunConfig(
-            provider="deepseek",
-            model=model or os.environ.get("WORKFLOW_MODEL") or "deepseek-chat",
+            provider=provider,
+            model=use_model,
             structured_output_mode=structured_output_mode or "function_calling",
-            base_url="https://api.deepseek.com/v1",
+            base_url=env.get("LLM_BASE_URL") or base_url,
             api_key=key,
+            **common,
+        )
+
+    # 任意自定义 OpenAI 兼容端点(LLM_BASE_URL + LLM_API_KEY + --model),provider 名随意
+    if provider != "cloud" and env.get("LLM_BASE_URL") and env.get("LLM_API_KEY"):
+        use_model = model or env.get("WORKFLOW_MODEL", "")
+        if not use_model:
+            raise ConfigError("自定义端点需要 --model 指定模型名")
+        return RunConfig(
+            provider=provider,
+            model=use_model,
+            structured_output_mode=structured_output_mode or "function_calling",
+            base_url=env["LLM_BASE_URL"],
+            api_key=env["LLM_API_KEY"],
             **common,
         )
 
@@ -107,4 +146,7 @@ def make_config(
             **common,
         )
 
-    raise ConfigError(f"未知 provider: {provider!r}(可选 mock / cloud / deepseek)")
+    raise ConfigError(
+        f"未知 provider: {provider!r}"
+        "(可选 mock / cloud / deepseek / glm / kimi / qwen / openai;或设 LLM_BASE_URL + LLM_API_KEY 接任意 OpenAI 兼容端点)"
+    )

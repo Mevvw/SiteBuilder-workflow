@@ -22,13 +22,15 @@ python -m workflow_chain run "咖啡品牌官网" --provider mock
 python -m workflow_chain run "咖啡品牌官网" --provider mock --chaos s2:1
 ```
 
-## 三档模型接入
+## 模型接入
 
 | provider | 鉴权 | 结构化输出 | 说明 |
 |---|---|---|---|
 | `mock` | 无 | 内置样例 | 零 token;支持 `--chaos s2:1` / `s2:0` 注入毒样本 |
 | `cloud` | 免密钥(`.cloud-config.json` 的 publicConfig) | json_mode | WorkBuddy 云端 LLM,按官方 JS SDK 线协议直连(`x-wb-webapp-access-key` 头 + 强制流式 SSE) |
-| `deepseek` | `DEEPSEEK_API_KEY`(.env) | function_calling | DeepSeek 官方 API,解析失败自动回退 JSON 修复路径 |
+| `deepseek` | `DEEPSEEK_API_KEY`(.env) | function_calling | DeepSeek 官方 API(默认模型 deepseek-chat),解析失败自动回退 JSON 修复路径 |
+| `glm` / `kimi` / `qwen` / `openai` | 对应厂商 `*_API_KEY`(.env) | function_calling | OpenAI 兼容预设:智谱 / Moonshot / 通义 / OpenAI,`--model` 指定模型 |
+| 任意自定义名 | `LLM_BASE_URL` + `LLM_API_KEY`(.env) | function_calling | 接任何 OpenAI 兼容端点(SiliconFlow / 火山方舟 / 自建网关等) |
 
 ```bash
 # cloud 档:先看可用模型,再跑
@@ -42,7 +44,7 @@ cloud 档需要项目根目录的 `.cloud-config.json`(WorkBuddy 云服务激活
 { "publicConfig": { "endpoint": "https://…", "publishableKey": "wbpk_…" } }
 ```
 
-deepseek 档:复制 `.env.example` 为 `.env` 并填入 `DEEPSEEK_API_KEY`。
+OpenAI 兼容档:复制 `.env.example` 为 `.env` 填入对应厂商 Key,例如 `ZHIPU_API_KEY` 后 `--provider glm --model glm-5.3`。
 
 ## 工作流拓扑
 
@@ -74,7 +76,7 @@ run-report.json            汇总:门禁日志 / 回炉计数 / token 用量 / �
 
 ## 测试
 
-`python -m pytest -q` —— 46 项:
+`python -m pytest -q` —— 53 项:
 
 - T1/T2 门禁校验(色板 hex、缓动、模块、字体栈;属性白/黑名单、stagger/clip-reveal、降级说明)
 - T3 gate_3 责任路由(失败项多者优先,平局回 rework_counts 较小者)
@@ -85,6 +87,7 @@ run-report.json            汇总:门禁日志 / 回炉计数 / token 用量 / �
 - T8 结构化输出自修复(坏 JSON → 修复 → 成功;重试耗尽 → FatalLLMError)
 - T9 mock 全链 happy path / T10 chaos 回炉自愈
 - T13 内容门禁:卡片数量上下限(3~6,可配置)与 span 层次字段
+- T14 provider 工厂:厂商预设(glm/kimi/qwen/openai)与自定义端点解析
 - T11/T12 cloud 集成(`RUN_CLOUD_TESTS=1` 启用,需 `.cloud-config.json`)
 
 ## 目录
