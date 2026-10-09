@@ -55,7 +55,7 @@ START
 
 | 节点 | 读取(state) | 写入(state) | 落盘产物 | LLM 调用形态 |
 |------|--------------|--------------|----------|--------------|
-| `s1_style_framework` | `brief`、`feedback["s1"]`(可空) | `style: StyleDecision`、`scaffold: ScaffoldPlan`、`feedback.pop("s1")` | `01-style-and-scaffold.md` + `scaffold/index.html`(最小骨架) | system=资深建站架构师规则;user=brief+反馈;`with_structured_output(StyleScaffoldOut)` |
+| `s1_style_framework` | `brief`、`feedback["s1"]`(可空) | `style: StyleDecision`、`scaffold: ScaffoldPlan`、`feedback.pop("s1")` | `01-style-and-scaffold.md` + `scaffold/index.html`(线框骨架:演示文案+占位卡片,确定性渲染) | system=资深建站架构师规则;user=brief+反馈;`with_structured_output(StyleScaffoldOut)` |
 | `s2_animation` | `style`、`scaffold`、`feedback["s2"]`(可空) | `animation: AnimationSpec`、`feedback.pop("s2")` | `02-animation-spec.md` | system=动效编排师规则(三手法白名单);user=style/scaffold 摘要+反馈;结构化输出 |
 | `s3_performance` | `style`、`scaffold`、`animation` | `perf: PerfReport` | `03-perf-report.md`、`03-perf-raw.json`(工具原始输出) | 先 `perf_audit(animation, scaffold)` 得 JSON → LLM 仅做解读与修复建议(文本输出) |
 | `s4_content` | `brief`、`style`、`scaffold`、`animation`、`perf` | `content: ContentPlan` | `04-content-plan.md` | system=内容策划规则(禁虚构);user=全部上游摘要;结构化输出 |

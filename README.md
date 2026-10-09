@@ -63,7 +63,7 @@ START → s1_style_framework → g1_style ─pass→ s2_animation → g2_animati
 
 ```
 01-style-and-scaffold.md   风格决策 + 框架方案
-scaffold/index.html        骨架页(色板/字体/模块)
+scaffold/index.html        线框骨架页(演示文案+占位卡片,色板/字体/缓动生效)
 02-animation-spec.md       动画编排(入场/滚动/悬停 + 降级说明)
 03-perf-raw.json           perf_audit 五项检查原始输出
 03-perf-report.md          性能报告(LLM 解读)
