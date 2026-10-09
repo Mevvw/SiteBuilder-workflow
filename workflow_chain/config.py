@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 CLOUD_CONFIG_FILE = ".cloud-config.json"
@@ -34,6 +34,8 @@ class RunConfig:
     max_reworks: int = 2
     min_cards: int = 3  # 内容卡数量门禁下限(种子提示词规则:作品卡 3~6 张)
     max_cards: int = 6  # 内容卡数量门禁上限
+    node_models: dict = field(default_factory=dict)  # 每节点覆盖模型,如 {"s1": "glm-5.3"}(同 provider 端点)
+    enable_review: bool = True  # s5 对抗评审 agent(多 agent;--no-review 关闭)
     max_total_tokens: int = 200_000  # 预算硬上限
     max_llm_calls: int = 50
     temperature: float = 0.3
@@ -68,6 +70,8 @@ def make_config(
     artifacts_dir: str | None = None,
     min_cards: int = 3,
     max_cards: int = 6,
+    node_models: dict | None = None,
+    enable_review: bool = True,
     _env: dict[str, str] | None = None,
 ) -> RunConfig:
     """provider 工厂:mock 零依赖;cloud 读 .cloud-config.json;OpenAI 兼容预设/自定义端点读 .env。
@@ -76,11 +80,20 @@ def make_config(
     _env 仅供测试注入,默认从 .env + 环境变量合并读取(环境变量优先)。
     """
     provider = (provider or "mock").lower()
+    node_models = dict(node_models or {})
+    bad = [k for k in node_models if k not in {"s1", "s2", "s3", "s4", "review"}]
+    if bad:
+        raise ConfigError(
+            f"node_models 含非法节点名:{','.join(sorted(bad))}(允许 s1/s2/s3/s4/review)"
+        )
+    if any(not str(v).strip() for v in node_models.values()):
+        raise ConfigError("node_models 的模型名不能为空")
     if min_cards < 1 or max_cards < min_cards:
         raise ConfigError(
             f"内容卡数量门禁非法:min_cards={min_cards}, max_cards={max_cards}(需 1 ≤ min ≤ max)"
         )
-    common = dict(max_reworks=max_reworks, min_cards=min_cards, max_cards=max_cards)
+    common = dict(max_reworks=max_reworks, min_cards=min_cards, max_cards=max_cards,
+                  node_models=node_models, enable_review=enable_review)
 
     if provider == "mock":
         return RunConfig(

@@ -132,6 +132,17 @@ class BaseRunner:
     def _structured_fc(self, schema, system, user) -> BaseModel:  # pragma: no cover
         raise NotImplementedError
 
+    # ---- 工具增强的结构化输出(多 Agent:节点内工具循环) ----
+    supports_tools = False  # Runner 是否具备 agent 式工具循环能力
+
+    def structured_with_tools(self, schema: Type[BaseModel], system: str, user: str,
+                              tools: dict, max_rounds: int = 3) -> BaseModel:
+        """带工具取证的结构化输出;不支持工具的 Runner 退化为单轮 structured()。
+
+        tools: {name: (args_pydantic_schema, zero_arg_callable)};callable 返回 JSON 可序列化 dict。
+        """
+        return self.structured(schema, system, user)
+
     # ---- 重试退避(可重试:网络/超时/限流/5xx;不可重试即短路) ----
     _FATAL_PATTERNS = (
         "401", "403", "unauthorized", "forbidden", "auth_", "invalid_request",
@@ -160,7 +171,8 @@ class BaseRunner:
 
 
 # ---------------- Mock Runner ----------------
-_NODE_OF_SCHEMA = {"StyleScaffoldOut": "s1", "AnimationSpec": "s2", "ContentPlan": "s4"}
+_NODE_OF_SCHEMA = {"StyleScaffoldOut": "s1", "AnimationSpec": "s2", "ContentPlan": "s4",
+                   "ReviewResult": "s5", "AuditAdvice": "s3"}
 
 
 class MockRunner(BaseRunner):
@@ -202,12 +214,36 @@ class MockRunner(BaseRunner):
             "s1": mock_data.good_style_scaffold,
             "s2": mock_data.good_animation,
             "s4": mock_data.good_content,
+            "s5": mock_data.good_review,
         }[node]()
 
     def complete(self, system: str, user: str) -> str:
         self.budget.pre_call()
         self.budget.add(est_tokens(system + user), est_tokens("[mock 审计结论]"))
         return "[mock] 审计结论:五项检查已逐条核验,失败项已按 owner 标注责任方,建议按明细修复。"
+
+    # ---- 工具循环(mock 脚本化:一次取全部工具证据,组装确定性结论) ----
+    supports_tools = True
+
+    def structured_with_tools(self, schema: Type[BaseModel], system: str, user: str,
+                              tools: dict, max_rounds: int = 3) -> BaseModel:
+        from workflow_chain.state import AuditAdvice
+
+        self.budget.pre_call()
+        evidence = [{"tool": name, "result": fn()} for name, (_args, fn) in tools.items()]
+        self.budget.add(est_tokens(system + user),
+                        est_tokens(json.dumps(evidence, ensure_ascii=False)))
+        if schema.__name__ == "AuditAdvice":
+            eb = next((e["result"] for e in evidence if e["tool"] == "entrance_budget"), {})
+            dw = next((e["result"] for e in evidence if e["tool"] == "deps_weight"), {})
+            advice = (
+                f"[mock·工具循环] 已自主取证 {len(evidence)} 项:"
+                f"首屏入场预算 {eb.get('budget_ms')}ms/{eb.get('entrance_rules')} 条规则({eb.get('verdict')});"
+                f"重依赖 {dw.get('heavy_deps') or '无'}({dw.get('verdict')})。"
+                "五项检查按 owner 标注,建议按明细修复。"
+            )
+            return AuditAdvice(advice=advice, evidence=evidence)
+        return self.structured(schema, system, user)
 
 
 # ---------------- OpenAI 兼容 Runner(deepseek) ----------------
@@ -296,6 +332,41 @@ class OpenAICompatRunner(BaseRunner):
         # with_structured_output 丢失 usage → 按输入长度估算(预算硬上限仍生效)
         self.budget.add(est_tokens(system + user), est_tokens(str(obj)[:2000]))
         return obj
+
+    # ---- 工具循环(真 agent 语义:LLM 自主决定调哪些取证工具,收集后给最终 JSON) ----
+    supports_tools = True
+
+    def structured_with_tools(self, schema: Type[BaseModel], system: str, user: str,
+                              tools: dict, max_rounds: int = 3) -> BaseModel:
+        from langchain_core.messages import ToolMessage
+
+        self.budget.pre_call()
+        llm = self._llm.bind_tools([args for args, _fn in tools.values()])
+        messages: list = [("system", system), ("human", user)]
+        evidence: list[dict] = []
+        for _ in range(max_rounds):
+            resp = self._with_retry(lambda: llm.invoke(messages))
+            um = getattr(resp, "usage_metadata", None) or {}
+            self.budget.add(um.get("input_tokens", 0) or 0, um.get("output_tokens", 0) or 0)
+            tcs = getattr(resp, "tool_calls", None)
+            if not tcs:
+                content = resp.content if isinstance(resp.content, str) else str(resp.content)
+                obj, err = _extract_json(content)
+                if obj is None:
+                    messages.append(resp)
+                    messages.append(("human",
+                                     f"输出不是合法 JSON({err}),请只输出符合 schema 的 JSON 对象,不要再调工具。"))
+                    continue
+                return schema.model_validate(obj)
+            messages.append(resp)
+            for tc in tcs:
+                name = tc.get("name") or ""
+                entry = tools.get(name)
+                result = entry[1]() if entry else {"error": f"未知工具 {name}"}
+                evidence.append({"tool": name, "result": result})
+                messages.append(ToolMessage(content=json.dumps(result, ensure_ascii=False),
+                                            tool_call_id=tc.get("id") or name))
+        raise FatalLLMError(f"工具循环 {max_rounds} 轮耗尽仍未见最终 JSON 结论(已取证:{[e['tool'] for e in evidence]})")
 
 
 # ---------------- Cloud Runner(WorkBuddy 云端免密钥 LLM) ----------------

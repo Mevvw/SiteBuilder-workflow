@@ -1,6 +1,7 @@
 """StateGraph 组装(拓扑唯一事实来源,DESIGN.md §0)+ run_chain 执行入口。"""
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -9,23 +10,34 @@ from langgraph.graph import END, StateGraph
 from workflow_chain.config import RunConfig
 from workflow_chain.gates import (
     g1_style, g2_animation, g3_performance, g4_content,
-    route_g1, route_g2, route_g3, route_g4,
+    route_g1, route_g2, route_g3, route_g4, route_review,
 )
 from workflow_chain.llm import Budget, FatalBudgetError, FatalLLMError, make_runner
 from workflow_chain.nodes import (
-    make_abort, make_s1, make_s2, make_s3, make_s4, make_finalize, write_crash_abort,
+    make_abort, make_finalize, make_s1, make_s2, make_s3, make_s4, make_s5,
+    write_crash_abort,
 )
 from workflow_chain.state import WorkflowState
 
 
-def build_graph(runner, config: RunConfig, budget: Budget):
+def build_graph(runner, config: RunConfig, budget: Budget, chaos: dict | None = None):
     g = StateGraph(WorkflowState)
 
+    # 多 Agent:按节点覆盖模型(同 provider 端点),未覆盖节点用默认 runner;Budget 全局共享
+    runners = {"default": runner}
+    for node in ("s1", "s2", "s3", "s4", "review"):
+        m = (config.node_models or {}).get(node)
+        if m:
+            runners[node] = make_runner(replace(config, model=m), budget, chaos=chaos)
+
+    def _runner_of(node: str):
+        return runners.get(node, runner)
+
     # 步骤节点(LLM)
-    g.add_node("s1_style_framework", make_s1(runner, config))
-    g.add_node("s2_animation", make_s2(runner, config))
-    g.add_node("s3_performance", make_s3(runner, config))
-    g.add_node("s4_content", make_s4(runner, config))
+    g.add_node("s1_style_framework", make_s1(_runner_of("s1"), config))
+    g.add_node("s2_animation", make_s2(_runner_of("s2"), config))
+    g.add_node("s3_performance", make_s3(_runner_of("s3"), config))
+    g.add_node("s4_content", make_s4(_runner_of("s4"), config))
     # 门禁节点(确定性,永不调 LLM)
     g.add_node("g1_style", g1_style)
     g.add_node("g2_animation", g2_animation)
@@ -34,6 +46,10 @@ def build_graph(runner, config: RunConfig, budget: Budget):
     # 收口节点
     g.add_node("finalize", make_finalize(budget))
     g.add_node("abort", make_abort(budget))
+    # 对抗评审 agent(多 agent;--no-review 可关)
+    enable_review = bool(config.enable_review)
+    if enable_review:
+        g.add_node("s5_review", make_s5(_runner_of("review"), config))
 
     def _m(*names: str) -> dict:
         return {n: n for n in names}
@@ -54,7 +70,12 @@ def build_graph(runner, config: RunConfig, budget: Budget):
         "g3_performance", lambda s: route_g3(s, config.max_reworks),
         _m("s1_style_framework", "s2_animation", "s4_content", "abort"),
     )
-    g.add_edge("s4_content", "g4_content")
+    g.add_edge("s4_content", "s5_review" if enable_review else "g4_content")
+    if enable_review:
+        g.add_conditional_edges(
+            "s5_review", lambda s: route_review(s, config.max_reworks),
+            _m("s4_content", "g4_content", "abort"),
+        )
     g.add_conditional_edges(
         "g4_content", lambda s: route_g4(s, config.max_reworks),
         _m("s4_content", "finalize", "abort"),
@@ -73,7 +94,7 @@ def run_chain(brief: str, config: RunConfig, chaos: dict | None = None,
 
     budget = Budget(config.max_total_tokens, config.max_llm_calls)
     runner = make_runner(config, budget, chaos=chaos)
-    graph = build_graph(runner, config, budget)
+    graph = build_graph(runner, config, budget, chaos=chaos)
     init = {
         "brief": brief,
         "run_id": run_id,

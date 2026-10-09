@@ -49,12 +49,13 @@ OpenAI 兼容档:复制 `.env.example` 为 `.env` 填入对应厂商 Key,例如 
 ## 工作流拓扑
 
 ```
-START → s1_style_framework → g1_style ─pass→ s2_animation → g2_animation ─pass→ s3_performance → g3_performance ─pass→ s4_content → g4_content ─pass→ finalize → END(done)
-           ↑  └fail(≤2)→ 回炉      ↑  └fail(≤2)→ 回炉      ↑   └fail→ 责任路由(s1/s2)   ↑  └fail(≤2)→ 回炉        ↑ └fail(≤2)→ 回炉
+START → s1_style_framework → g1_style ─pass→ s2_animation → g2_animation ─pass→ s3_performance → g3_performance ─pass→ s4_content → s5_review ─pass→ g4_content ─pass→ finalize → END(done)
+           ↑  └fail(≤2)→ 回炉      ↑  └fail(≤2)→ 回炉      ↑   └fail→ 责任路由(s1/s2)   ↑  └fail(≤2)→ 回炉      ↑ └revise→ 打回 s4  ↑ └fail(≤2)→ 回炉
            └──────────────────── 超限(>2)────────────────────────────→ abort → END(aborted)
 ```
 
 - **门禁 = 门禁节点 + 路由条件边**两件套(LangGraph 条件边只读,只有节点能写状态)
+- **多 Agent**:s1~s5 各有角色化 SYSTEM;`--node-models s1=glm-5.3,s4=deepseek-chat` 按节点覆盖模型(同端点,Budget 全局共享);s3 为工具循环 agent(bind_tools 自主取证);s5 对抗评审 revise 打回 s4(复用回炉机制,`--no-review` 关闭)
 - 每步回炉上限 `--max-reworks`(默认 2),超限走 abort;反馈写入 `state.feedback`,重跑注入 prompt,成功后显式清除
 - 内容门禁:作品卡数量默认 3~6(`--min-cards/--max-cards` 可调);`span` 字段标注层次跨度(wide=跨2列 / full=横贯全宽);联系模块遵守隐私红线(只保留姓名+联系方式,禁照片/年龄/所在地/工作年限)
 - 预算硬上限:`max_total_tokens=200_000` / `max_llm_calls=50`,触顶 abort(报告标注 budget_exceeded)
@@ -76,7 +77,7 @@ run-report.json            汇总:门禁日志 / 回炉计数 / token 用量 / �
 
 ## 测试
 
-`python -m pytest -q` —— 55 项:
+`python -m pytest -q` —— 62 项:
 
 - T1/T2 门禁校验(色板 hex、缓动、模块、字体栈;属性白/黑名单、stagger/clip-reveal、降级说明)
 - T3 gate_3 责任路由(失败项多者优先,平局回 rework_counts 较小者)
@@ -89,6 +90,9 @@ run-report.json            汇总:门禁日志 / 回炉计数 / token 用量 / �
 - T13 内容门禁:卡片数量上下限(3~6,可配置)与 span 层次字段
 - T14 provider 工厂:厂商预设(glm/kimi/qwen/openai)与自定义端点解析
 - T15 s2 动画注入:编排通过后骨架页携带真实动画(chaos 回炉后注入的是合规版)
+- T16 按节点覆盖模型:--node-models 配置解析与校验、报告可见
+- T17 s3 工具循环:agent 自主取证(首屏预算/重依赖)落进性能报告
+- T18 对抗评审:默认 pass;chaos s5:1 → revise 打回 s4 自愈;--no-review 跳过
 - T11/T12 cloud 集成(`RUN_CLOUD_TESTS=1` 启用,需 `.cloud-config.json`)
 
 ## 目录

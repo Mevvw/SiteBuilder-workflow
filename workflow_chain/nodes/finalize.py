@@ -28,6 +28,7 @@ def make_finalize(budget: Budget):
             "artifacts": files,
             "gate_logs": [g.model_dump() for g in (state.get("gate_logs") or [])],
             "rework_counts": state.get("rework_counts") or {},
+            "review": (state["review"].model_dump() if state.get("review") else None),
             "usage": budget.snapshot(),
             "config": cfg,
         }

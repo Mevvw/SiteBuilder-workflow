@@ -35,6 +35,7 @@ START
 | 2 | `s2_animation` | LLM 节点 | ② 出入场动画:基于风格与框架产出动画编排(首屏编排/滚动编排/悬停),写 spec 文件 | ✅ 结构化输出 |
 | 3 | `s3_performance` | 工具 + LLM 节点 | ③ 性能验证:**先调 `perf_audit` 工具做确定性检查**,LLM 只负责解读结果、给修复建议 | ✅(解读)+ 🔧 |
 | 4 | `s4_content` | LLM 节点 | ④ 内容替换:产出真实内容方案(卡片清单/文案/资产映射),写 content-plan.md | ✅ 结构化输出 |
+| 5 | `s5_review` | LLM 节点(对抗评审 agent) | 主观质量把关(文案力度/叙事层次/风格契合),revise → 写 s4 反馈打回(复用回炉机制);`--no-review` 可关 | ✅ 结构化输出 |
 | 5 | `finalize` | 工具节点 | 汇总所有产物 + 门禁日志 + token 用量/耗时,写 `run-report.json`,`status=done` | ❌ |
 | 6 | `abort` | 工具节点 | 回炉超限或致命错误的收口:写 `abort-report.json`,`status=aborted` | ❌ |
 
@@ -59,6 +60,7 @@ START
 | `s2_animation` | `style`、`scaffold`、`feedback["s2"]`(可空) | `animation: AnimationSpec`、`feedback.pop("s2")` | `02-animation-spec.md` + **重写 `scaffold/index.html`(把编排注入骨架页:入场 stagger/滚动揭示/悬停/reduced-motion 降级)** | system=动效编排师规则(三手法白名单);user=style/scaffold 摘要+反馈;结构化输出 |
 | `s3_performance` | `style`、`scaffold`、`animation` | `perf: PerfReport` | `03-perf-report.md`、`03-perf-raw.json`(工具原始输出) | 先 `perf_audit(animation, scaffold)` 得 JSON → LLM 仅做解读与修复建议(文本输出) |
 | `s4_content` | `brief`、`style`、`scaffold`、`animation`、`perf` | `content: ContentPlan` | `04-content-plan.md` | system=内容策划规则(禁虚构);user=全部上游摘要;结构化输出 |
+| `s5_review` | `brief`、`style`、`content`、`feedback["s4"]`(可空) | `review: ReviewResult`;revise 时写 `rework_counts["s4"]+1` 与 `feedback["s4"]` | `05-review.md` | system=苛刻创意总监(主观质量,不重复门禁规则);结构化输出 |
 | `finalize` | 全部产物字段、`gate_logs`、`usage` | `status="done"` | `run-report.json` | ❌ |
 | `abort` | `error` / `gate_logs`、`rework_counts` | `status="aborted"` | `abort-report.json` | ❌ |
 
@@ -115,6 +117,7 @@ class ContentPlan(BaseModel):
 | `animation` | `AnimationSpec \| None` | s2 | 覆盖 | ② 动画编排 |
 | `perf` | `PerfReport \| None` | s3 | 覆盖 | ③ 性能报告 |
 | `content` | `ContentPlan \| None` | s4 | 覆盖 | ④ 内容方案 |
+| `review` | `ReviewResult \| None` | s5 | 覆盖 | 对抗评审结论(--no-review 时为 None) |
 | `gate_logs` | `list[GateLog]` | 各门禁 | **`operator.add`(追加)** | 每次判定:{gate, verdict, violations[], ts} |
 | `rework_counts` | `dict[step, int]` | 各门禁 | **dict 合并** | 每步回炉计数 |
 | `feedback` | `dict[step, str]` | 各门禁 | **dict 合并,值为 `None` 表示删除该键** | 回炉反馈;消费节点重跑成功后返回 `{step: None}` 显式清除,杜绝旧反馈残留污染下一轮 prompt |
@@ -252,7 +255,19 @@ langchain-workflow/
 | + | 自查:LangGraph 条件边只读不能写状态,原设计"条件边做校验并写反馈"不可行 | 架构修正:「门禁节点(写状态)+ 路由条件边(纯路由)」两件套 | §0/§1 |
 
 **实现落位(与 §8 目录对应)**:`state.py`(模型+reducer)/ `tools.py`(perf_audit、write_artifact、redact_secrets)/ `gates.py`(门禁节点+路由)/ `llm.py`(Budget、自修复、Mock/OpenAI 兼容 Runner)/ `nodes/`(六节点)/ `graph.py`(组装+run_chain)/ `__main__.py`(CLI:run / models 子命令)。
-测试:55 项全绿(T1~T10、T13~T15 离线;T11/T12 cloud 集成默认跳过,RUN_CLOUD_TESTS=1 启用)。
+测试:62 项全绿(T1~T10、T13~T18 离线;T11/T12 cloud 集成默认跳过,RUN_CLOUD_TESTS=1 启用)。
+
+---
+
+## 11. 增补记录(v1.2 → v1.3,2026-10-09 · 多 Agent)
+
+主人要求「多节点不同 agent」→ 三档全部落地(架构图见对话):
+
+| 档 | 能力 | 实现 |
+|---|------|------|
+| 1 | 每节点独立模型 | `RunConfig.node_models`(CLI `--node-models s1=glm-5.3,s4=deepseek-chat`);build_graph 按节点构建 Runner(replace(model),Budget 全局共享);T16 |
+| 2 | 节点内工具循环 | `BaseRunner.structured_with_tools` + `supports_tools`;OpenAICompatRunner 真 bind_tools 循环(LLM 自主调 entrance_budget/deps_weight 取证后交 JSON);MockRunner 脚本化同路径;不支持工具的 Runner 自动退化单轮;T17 |
+| 3 | 对抗式评审 agent | 新节点 `s5_review`(苛刻创意总监 SYSTEM,只挑主观质量);revise → 复用 s4 回炉机制(反馈/计数/超限 abort);`--no-review` 可关;T18 |
 
 ---
 

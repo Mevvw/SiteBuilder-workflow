@@ -133,6 +133,21 @@ class ContentPlan(BaseModel):
     placeholders_removed: bool
 
 
+class AuditAdvice(BaseModel):
+    """s3 工具循环的最终结论(节点侧组装进 PerfReport.advice 与 03-perf-raw.json)。"""
+
+    advice: str
+    evidence: list[dict] = []  # 每项 {tool, result}:agent 循环中实际取证的内容
+
+
+class ReviewResult(BaseModel):
+    """s5 对抗评审的结论(主观质量把关,与确定性门禁互补)。"""
+
+    verdict: Literal["pass", "revise"]
+    score: int = Field(ge=0, le=10)
+    notes: list[str] = []  # revise 时必须给出可执行修改指令
+
+
 class GateLog(BaseModel):
     gate: str
     verdict: Literal["pass", "fail"]
@@ -151,6 +166,7 @@ class WorkflowState(TypedDict, total=False):
     animation: Optional[AnimationSpec]
     perf: Optional[PerfReport]
     content: Optional[ContentPlan]
+    review: Optional[ReviewResult]  # s5 对抗评审结论(--no-review 跳过时为 None)
     gate_logs: Annotated[list[GateLog], append_list]
     rework_counts: Annotated[dict, merge_dict]
     feedback: Annotated[dict, merge_dict]  # 值为 None = 删除该键

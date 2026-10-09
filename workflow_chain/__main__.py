@@ -33,6 +33,20 @@ def _parse_chaos(spec: str) -> dict:
     return out
 
 
+def _parse_node_models(spec: str) -> dict:
+    """'s1=glm-5.3,s4=deepseek-chat' → {'s1': 'glm-5.3', 's4': 'deepseek-chat'}。"""
+    out: dict[str, str] = {}
+    for part in (spec or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        k, _, v = part.partition("=")
+        if not k.strip() or not v.strip():
+            raise ValueError(f"--node-models 格式非法:{part!r}(应为 节点=模型,如 s1=glm-5.3)")
+        out[k.strip()] = v.strip()
+    return out
+
+
 def _print_summary(final: dict) -> None:
     d = final.get("artifacts_dir", "")
     console.print(f"\n[bold]运行结果:[/bold]{final.get('status')}  [dim]{d}[/dim]")
@@ -101,6 +115,9 @@ def main(argv=None) -> int:
     run_p.add_argument("--out", default="output", help="产物根目录(默认 ./output)")
     run_p.add_argument("--min-cards", type=int, default=3, help="内容卡数量下限(默认 3)")
     run_p.add_argument("--max-cards", type=int, default=6, help="内容卡数量上限(默认 6)")
+    run_p.add_argument("--node-models", default="",
+                       help="按节点覆盖模型,如 s1=glm-5.3,s4=deepseek-chat(与 --provider 同族端点)")
+    run_p.add_argument("--no-review", action="store_true", help="跳过 s5 对抗评审 agent")
 
     models_p = sub.add_parser("models", help="列出云端可用模型(cloud 档)")
     models_p.add_argument("--config", default=CLOUD_CONFIG_FILE)
@@ -112,15 +129,20 @@ def main(argv=None) -> int:
 
     try:
         chaos = _parse_chaos(getattr(args, "chaos", ""))
+        node_models = _parse_node_models(getattr(args, "node_models", ""))
         config = make_config(args.provider, model=args.model,
                              max_reworks=args.max_reworks,
-                             min_cards=args.min_cards, max_cards=args.max_cards)
+                             min_cards=args.min_cards, max_cards=args.max_cards,
+                             node_models=node_models,
+                             enable_review=not args.no_review)
     except (ConfigError, ValueError) as e:
         console.print(f"[red]配置错误:[/red]{e}")
         return 2
 
     console.print(f"[bold]provider[/bold]={config.provider}  model={config.model or '-'}  "
                   f"mode={config.structured_output_mode}  max_reworks={config.max_reworks}"
+                  + (f"  node_models={config.node_models}" if config.node_models else "")
+                  + ("" if config.enable_review else "  review=off")
                   + (f"  chaos={chaos}" if chaos else ""))
     try:
         final = run_chain(args.brief, config, chaos=chaos, artifacts_root=args.out)

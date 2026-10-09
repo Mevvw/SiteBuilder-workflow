@@ -217,3 +217,13 @@ def route_g4(state: WorkflowState, max_reworks: int = 2) -> str:
     if (state.get("rework_counts") or {}).get("s4", 0) > max_reworks:
         return "abort"
     return "s4_content"
+
+
+# ---------------- s5 对抗评审路由(多 agent;计数与门禁共用 s4 槽位) ----------------
+def route_review(state: WorkflowState, max_reworks: int = 2) -> str:
+    review = state.get("review")
+    if review is None or review.verdict != "revise":
+        return "g4_content"
+    if (state.get("rework_counts") or {}).get("s4", 0) > max_reworks:
+        return "abort"
+    return "s4_content"

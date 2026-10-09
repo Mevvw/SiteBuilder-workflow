@@ -15,6 +15,7 @@ from workflow_chain.state import (
     FileSpec,
     LinkSpec,
     Palette,
+    ReviewResult,
     ScaffoldPlan,
     StyleDecision,
     StyleScaffoldOut,
@@ -98,8 +99,27 @@ def good_content() -> ContentPlan:
     )
 
 
+def poisoned_review() -> ReviewResult:
+    """chaos s5 毒样本:首轮评审判 revise(对抗循环触发),第二轮走 good_review 通过。"""
+    return ReviewResult(
+        verdict="revise",
+        score=4,
+        notes=["核心业务卡 desc 偏宣传话术,补充可验证的交付细节",
+               "联系卡缺少明确的下一步动作(如预约沟通入口)"],
+    )
+
+
+def good_review() -> ReviewResult:
+    """合规评审(可通过 s5)。"""
+    return ReviewResult(
+        verdict="pass",
+        score=8,
+        notes=["文案具体,无空话套话", "wide/full 跨度与内容权重匹配", "风格与基调一致"],
+    )
+
+
 def poisoned_sample(node: str):
-    """chaos 毒样本:可解析、门禁不过。node ∈ {s1, s2, s4}。"""
+    """chaos 毒样本:可解析、门禁不过。node ∈ {s1, s2, s4, s5}。"""
     if node == "s1":
         base = good_style_scaffold()
         bad_style = base.style.model_copy(
@@ -135,4 +155,6 @@ def poisoned_sample(node: str):
             ],
             placeholders_removed=False,
         )
+    if node == "s5":
+        return poisoned_review()
     raise ValueError(f"未知节点: {node}")
